@@ -37,6 +37,8 @@ static bcast_set_t get_all_strategies_supported_by_injector() {
             broadcasting_strategy_t::no_broadcast};
 }
 
+
+
 bool is_data_supported(cpu_isa_t isa, data_type_t data_type) {
     UNUSED(isa);
     return !(data_type == data_type::bf16);
@@ -139,7 +141,7 @@ bool any_binary_postop_rhs_per_oc_broadcast(
     return any_binary_postop_rhs_per_oc_broadcast(
             post_ops, dst_d, get_all_strategies_supported_by_injector());
 }
-
+ 
 bool any_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
         const memory_desc_wrapper &dst_d,
         const bcast_set_t &supported_strategy_set) {
@@ -152,6 +154,21 @@ bool any_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
                     return bcast_type == broadcasting_strategy_t::per_oc
                             || bcast_type
                             == broadcasting_strategy_t::per_oc_spatial;
+                }
+                return false;
+            });
+}
+bool any_binary_postop_rhs_non_scalar_broadcast(
+        const post_ops_t &post_ops, const memory_desc_wrapper &dst_d) {
+    return std::any_of(post_ops.entry_.cbegin(), post_ops.entry_.cend(),
+            [&](const post_ops_t::entry_t &entry) -> bool {
+                if (entry.is_like_binary()) {
+                    const auto bcast_type = get_rhs_arg_broadcasting_strategy(
+                            entry.binary.src1_desc, dst_d,
+                            get_all_strategies_supported_by_injector());
+                    return !utils::one_of(bcast_type,
+                            broadcasting_strategy_t::scalar,
+                            broadcasting_strategy_t::unsupported);
                 }
                 return false;
             });

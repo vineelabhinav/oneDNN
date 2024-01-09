@@ -22,6 +22,7 @@
 
 #include "dnnl_types.h"
 
+#include "common/type_helpers.hpp"
 #include "common/dnnl_thread.hpp"
 #include "common/utils.hpp"
 
@@ -205,6 +206,9 @@ static inline bool mayiuse(const cpu_isa_t cpu_isa, bool soft = false) {
 static inline uint64_t get_sve_length() {
     return cpu().getSveLen();
 }
+static inline bool isa_has_s8s8(cpu_isa_t isa) {
+    return is_superset(isa, sve_256);
+}
 
 static inline bool mayiuse_atomic() {
     using namespace Xbyak_aarch64::util;
@@ -215,7 +219,21 @@ inline bool isa_has_bf16(cpu_isa_t isa) {
     return false;
 }
 
+
+static inline int isa_max_vlen(cpu_isa_t isa) {
+    if (isa == sve_512)
+        return cpu_isa_traits<sve_512>::vlen;
+    else if (isa == sve_512)
+        return cpu_isa_traits<sve_256>::vlen;
+    else if (isa == sve_512)
+        return cpu_isa_traits<sve_128>::vlen;
+    else
+        return 0;
+};
+
 } // namespace
+
+
 
 /* whatever is required to generate string literals... */
 #include "common/z_magic.hpp"
@@ -228,6 +246,28 @@ inline bool isa_has_bf16(cpu_isa_t isa) {
     ((isa) == sve_512 ? prefix STRINGIFY(sve_512) : \
     prefix suffix_if_any)))))
 /* clang-format on */
+
+inline size_t data_type_vnni_granularity(data_type_t data_type) {
+    using namespace data_type;
+    switch (data_type) {
+        case f32:
+        case s32: return size_t(1);
+        case f16:
+        case bf16: return size_t(2);
+        case s8:
+        case u8: return size_t(4);
+        case data_type::undef:
+        default: assert(!"unknown data_type");
+    }
+    return size_t(0); /* should not be reachable */
+}
+
+template <cpu_isa_t isa>
+inline size_t data_type_vnni_simd_elems(data_type_t data_type) {
+    const size_t dt_size = types::data_type_size(data_type);
+    assert(dt_size > 0);
+    return cpu_isa_traits<isa>::vlen / dt_size;
+}
 
 } // namespace aarch64
 } // namespace cpu

@@ -6,7 +6,7 @@
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
 *
-*     http://www.apache.org/licenses/LICENSE-2.0
+*     http://www.apache.org/licenses/LICENSE-2.0 
 *
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,13 +24,17 @@
 #include "cpu/matmul/ref_matmul_int8.hpp"
 #include "cpu/matmul/ref_sparse_matmul.hpp"
 
+
 #if DNNL_X64
 #include "cpu/x64/matmul/brgemm_matmul.hpp"
 #include "cpu/x64/matmul/jit_uni_sparse_matmul.hpp"
 using namespace dnnl::impl::cpu::x64::matmul;
 using namespace dnnl::impl::cpu::x64;
-#elif DNNL_AARCH64 && DNNL_AARCH64_USE_ACL
+#elif DNNL_AARCH64
+#include "cpu/aarch64/matmul/brgemm_matmul.hpp"
+#ifdef DNNL_AARCH64_USE_ACL
 #include "cpu/aarch64/matmul/acl_matmul.hpp"
+#endif
 using namespace dnnl::impl::cpu::aarch64::matmul;
 using namespace dnnl::impl::cpu::aarch64;
 
@@ -76,6 +80,8 @@ constexpr impl_list_item_t impl_list[] = REG_MATMUL_P({
         CPU_INSTANCE_AVX512(brgemm_matmul_t<avx512_core>)
         CPU_INSTANCE_AVX2(brgemm_matmul_t<avx2_vnni_2>)
         CPU_INSTANCE_AVX2(brgemm_matmul_t<avx2_vnni>)
+        CPU_INSTANCE_AARCH64(brgemm_matmul_t<sve_512>)
+        CPU_INSTANCE_AARCH64(brgemm_matmul_t<sve_256>)
         CPU_INSTANCE(gemm_f32_matmul_t)
         CPU_INSTANCE(gemm_bf16_matmul_t<f32>)
         CPU_INSTANCE(gemm_bf16_matmul_t<bf16>)

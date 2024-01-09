@@ -4,7 +4,7 @@
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
+* You may obtain a copy of the License at 
 *
 *     http://www.apache.org/licenses/LICENSE-2.0
 *
@@ -54,8 +54,7 @@ typedef enum {
 
 // Callee-saved registers
 constexpr Xbyak_aarch64::Operand::Code abi_save_gpr_regs[]
-        = {Xbyak_aarch64::Operand::X16, Xbyak_aarch64::Operand::X17,
-                Xbyak_aarch64::Operand::X19, Xbyak_aarch64::Operand::X20,
+        = {Xbyak_aarch64::Operand::X19, Xbyak_aarch64::Operand::X20,
                 Xbyak_aarch64::Operand::X21, Xbyak_aarch64::Operand::X22,
                 Xbyak_aarch64::Operand::X23, Xbyak_aarch64::Operand::X24,
                 Xbyak_aarch64::Operand::X25, Xbyak_aarch64::Operand::X26,
@@ -107,6 +106,9 @@ public:
         _op_mxcsr = 4u,
     };
 
+    const int EVEX_max_8b_offt = 0x200;
+    //const Xbyak::Reg64 reg_EVEX_max_8b_offt = rbp;
+
     const uint64_t cpu_sveLen = get_sve_length();
 
     const Xbyak_aarch64::WReg W_TMP_0 = w23;
@@ -119,7 +121,7 @@ public:
     const Xbyak_aarch64::XReg X_TMP_2 = x25;
     const Xbyak_aarch64::XReg X_TMP_3 = x26;
     const Xbyak_aarch64::XReg X_TMP_4 = x27;
-    const Xbyak_aarch64::XReg X_DEFAULT_ADDR = x28;
+    const Xbyak_aarch64::XReg X_DEFAULT_ADDR = x1;//x28;
     const Xbyak_aarch64::XReg X_SP = x21;
     const Xbyak_aarch64::XReg X_TRANSLATOR_STACK = x22;
     const Xbyak_aarch64::PReg P_TMP = p7;
@@ -132,7 +134,7 @@ public:
 
     const std::vector<Xbyak_aarch64::XReg> x_tmp_vec
             = {X_TMP_0, X_TMP_1, X_TMP_2, X_TMP_3, X_TMP_4};
-    const int x_tmp_vec_size = x_tmp_vec.size();
+    const int x_tmp_vec_size = x_tmp_vec.size(); 
 
     const Xbyak_aarch64::XReg param1 = abi_param1;
     constexpr static size_t translator_stack_offset = 1024 * 128;
@@ -200,6 +202,36 @@ public:
         ret();
     }
 
+    /*template <typename T> 
+    Xbyak_aarch64::XReg EVEX_compress_addr(Xbyak_aarch64::XReg base,
+            T raw_offt, bool bcast = false) {
+ 
+        assert(raw_offt <= INT_MAX);
+        auto offt = static_cast<int>(raw_offt);
+ 
+        add_imm(base, base, offt, x0);
+        //add(dst, src, static_cast<uint32_t>(imm & 0xfff));
+        //add(base, base, static_cast<uint32_t>(offt & 0xfff));
+        if (bcast) {
+            // addr is the same as addr when bcast is false.
+        }
+        return base;
+    }*/
+    template <typename T>
+    Xbyak_aarch64::XReg EVEX_compress_addr(const Xbyak_aarch64::XReg &addr,
+            const Xbyak_aarch64::XReg &x_tmp, Xbyak_aarch64::XReg base,
+            T raw_offt, bool bcast = false) {
+
+        assert(raw_offt <= INT_MAX);
+        auto offt = static_cast<int>(raw_offt);
+
+        add_imm(addr, base, offt, x_tmp);
+        if (bcast) {
+            // addr is the same as addr when bcast is false.
+        }
+        return addr;
+    }
+    
     // Disallow char-based labels completely
     void L(const char *label) = delete;
     void L(Xbyak_aarch64::Label &label) {
@@ -671,10 +703,11 @@ public:
 
 public:
     jit_generator(void *code_ptr = nullptr, size_t code_size = MAX_CODE_SIZE,
-            bool use_autogrow = true)
+            bool use_autogrow = true, cpu_isa_t max_cpu_isa = isa_all)
         : Xbyak_aarch64::CodeGenerator(code_size,
                 (code_ptr == nullptr && use_autogrow) ? Xbyak_aarch64::AutoGrow
-                                                      : code_ptr) {}
+                                                      : code_ptr)
+        , max_cpu_isa_(max_cpu_isa) {}
     virtual ~jit_generator() {}
 
     virtual const char *name() const = 0;
@@ -694,12 +727,14 @@ public:
     }
 
     virtual status_t create_kernel() {
-        generate();
+        std::cout<<"jit_generator.hpp:714:inside create_kernel()"<<"\n";
+        generate(); // calls jit_brgemm_matmul_copy_b_f32_t's generate() function
         jit_ker_ = getCode();
         return (jit_ker_) ? status::success : status::runtime_error;
     }
 
 private:
+    const cpu_isa_t max_cpu_isa_;
     const uint8_t *getCode() {
         this->ready();
         if (!is_initialized()) return nullptr;
@@ -707,6 +742,10 @@ private:
                 = reinterpret_cast<const uint8_t *>(CodeGenerator::getCode());
         register_jit_code(code, getSize() * CSIZE);
         return code;
+    }
+
+    inline bool is_valid_isa(cpu_isa_t isa) {
+        return is_subset(isa, max_cpu_isa_) && mayiuse(isa);
     }
 
     static inline bool is_initialized() {

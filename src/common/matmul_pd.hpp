@@ -25,8 +25,13 @@
 #include "primitive_desc.hpp"
 #include "utils.hpp"
 
+
+#define VDISPATCH_MATMUL(cond, msg, ...) \
+    VCONDCHECK(create, dispatch, matmul, (cond), status::unimplemented, \
+            "%s," msg, this->info(engine), ##__VA_ARGS__)
+            
 namespace dnnl {
-namespace impl {
+namespace impl { 
 
 struct matmul_pd_t : public primitive_desc_t {
     static constexpr auto base_pkind = primitive_kind::matmul;
