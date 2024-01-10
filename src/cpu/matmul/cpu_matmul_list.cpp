@@ -29,8 +29,11 @@
 #include "cpu/x64/matmul/jit_uni_sparse_matmul.hpp"
 using namespace dnnl::impl::cpu::x64::matmul;
 using namespace dnnl::impl::cpu::x64;
-#elif DNNL_AARCH64 && DNNL_AARCH64_USE_ACL
+#elif DNNL_AARCH64
+#include "cpu/aarch64/matmul/brgemm_matmul.hpp"
+#ifdef DNNL_AARCH64_USE_ACL
 #include "cpu/aarch64/matmul/acl_matmul.hpp"
+#endif
 using namespace dnnl::impl::cpu::aarch64::matmul;
 using namespace dnnl::impl::cpu::aarch64;
 
@@ -67,7 +70,7 @@ using namespace dnnl::impl::cpu::matmul;
 
 // clang-format off
 constexpr impl_list_item_t impl_list[] = REG_MATMUL_P({
-        CPU_INSTANCE_AARCH64_ACL(acl_matmul_t)
+        //CPU_INSTANCE_AARCH64_ACL(acl_matmul_t)
         CPU_INSTANCE_AMX(brgemm_matmul_t<avx512_core_amx_fp16>)
         CPU_INSTANCE_AMX(brgemm_matmul_t<avx512_core_amx>)
         CPU_INSTANCE_AVX512(brgemm_matmul_t<avx512_core_fp16>)
@@ -76,6 +79,8 @@ constexpr impl_list_item_t impl_list[] = REG_MATMUL_P({
         CPU_INSTANCE_AVX512(brgemm_matmul_t<avx512_core>)
         CPU_INSTANCE_AVX2(brgemm_matmul_t<avx2_vnni_2>)
         CPU_INSTANCE_AVX2(brgemm_matmul_t<avx2_vnni>)
+	CPU_INSTANCE_AARCH64(brgemm_matmul_t<sve_512>)
+        CPU_INSTANCE_AARCH64(brgemm_matmul_t<sve_256>)
         CPU_INSTANCE(gemm_f32_matmul_t)
         CPU_INSTANCE(gemm_bf16_matmul_t<f32>)
         CPU_INSTANCE(gemm_bf16_matmul_t<bf16>)

@@ -102,6 +102,22 @@ bool binary_args_broadcast_supported(const post_ops_t &post_ops,
             });
 }
 
+bool any_binary_postop_rhs_non_scalar_broadcast(
+        const post_ops_t &post_ops, const memory_desc_wrapper &dst_d) {
+    return std::any_of(post_ops.entry_.cbegin(), post_ops.entry_.cend(),
+            [&](const post_ops_t::entry_t &entry) -> bool {
+                if (entry.is_like_binary()) {
+                    const auto bcast_type = get_rhs_arg_broadcasting_strategy(
+                            entry.binary.src1_desc, dst_d,
+                            get_all_strategies_supported_by_injector());
+                    return !utils::one_of(bcast_type,
+                            broadcasting_strategy_t::scalar,
+                            broadcasting_strategy_t::unsupported);
+                }
+                return false;
+            });
+}
+
 bool binary_args_tail_supported(const post_ops_t &post_ops,
         const memory_desc_wrapper &dst_d, int vlen,
         const bcast_set_t &supported_strategy_set) {
@@ -793,7 +809,6 @@ void jit_uni_binary_injector_t<isa>::append_oc_offset(
         const auto strides = dst_d.blocking_desc().strides;
         const auto layout = injector_utils::get_layout_type(dst_d);
 
-        // c = X_TMP_0
         switch (layout) {
             case injector_utils::layout_t::ncsp:
                 calculate_oc_ncsp(strides, tmp_reg);
@@ -927,7 +942,6 @@ void jit_uni_binary_injector_t<isa>::append_mb_sp_offset(
         const auto strides = dst_d.blocking_desc().strides;
         const auto layout = injector_utils::get_layout_type(dst_d);
 
-        // c = X_TMP_0
         switch (layout) {
             case injector_utils::layout_t::ncsp:
                 calculate_mb_sp_ncsp(strides, tmp_reg);
