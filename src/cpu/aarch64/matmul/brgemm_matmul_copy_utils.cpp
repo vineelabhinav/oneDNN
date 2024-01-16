@@ -1873,7 +1873,7 @@ void jit_brgemm_matmul_copy_b_f32_t::copy_8_x_n_block(int nrows, int ncolumns) {
             continue;
         }
 
-        if(zero_padding < n_blk_step)
+        //if(zero_padding < n_blk_step)
             //printf("k %d n %d zpad %d\n",k,n,zero_padding);
         const opmask_t curr_msk = zero_padding < n_blk_step ? kTail : kFFFF;
         // Label l0;
