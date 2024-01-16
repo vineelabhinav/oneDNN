@@ -271,7 +271,10 @@ status_t brgemm_matmul_t<isa>::execute_body(const exec_ctx_t &ctx) const {
                                 || bgmmc.bcast_B_desc
                                            .bcast_across_all_batch_dims);
                 if (bgmmc.use_buffer_b && !skip_copy_b)
+                {
+                        printf("copy b chunk\n");
                     copy_b_chunk_in_buffer(brgmm_ctx, ithr, b, nb, kc);
+                }
                 for (int mb = m_start; mb < m_end; mb++) {
                     const bool skip_copy_a = mc_prev == mc && kc_prev == kc
                             && (b_prev == b

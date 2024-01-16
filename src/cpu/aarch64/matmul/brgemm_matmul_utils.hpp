@@ -211,7 +211,7 @@ struct brgemm_matmul_conf_utils_t {
     inline bool use_buffer_b(bool use_heuristic = true) const {
         // Values based on measured performance difference
         // between plain and copy-to-blocked routine.
-        return false;
+        //return true;
         size_t big_LDB = bgmmc.N > 256;
         bool is_pow2 = math::is_pow2(bgmmc.N);
         bool use_copy_buffer = IMPLICATION(

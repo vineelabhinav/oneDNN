@@ -1,0 +1,61 @@
+create kernel for b buf in copy utils
+conf_->N_tail 0
+conf_->N_blk 20
+copy_16_x_n_block
+column tailmask: 4
+k 0 n 16 zpad 4
+k 1 n 16 zpad 4
+k 2 n 16 zpad 4
+k 3 n 16 zpad 4
+k 4 n 16 zpad 4
+k 5 n 16 zpad 4
+k 6 n 16 zpad 4
+k 7 n 16 zpad 4
+copy_16_x_n_block
+column tailmask: 4
+k 0 n 16 zpad 4
+reorder init
+reorder
+create kernel for b buf in copy utils
+conf_->N_tail 20
+copy_16_x_n_block
+column tailmask: 4
+k 0 n 16 zpad 4
+k 1 n 16 zpad 4
+k 2 n 16 zpad 4
+k 3 n 16 zpad 4
+k 4 n 16 zpad 4
+k 5 n 16 zpad 4
+k 6 n 16 zpad 4
+k 7 n 16 zpad 4
+copy_16_x_n_block
+column tailmask: 4
+k 0 n 16 zpad 4
+conf_->N_blk 64
+copy_16_x_n_block
+column tailmask: 0
+copy_16_x_n_block
+column tailmask: 0
+onednn_verbose,info,oneDNN v3.2.0 (commit 010b6bcfb3bb5a9310b6d6403d3ca2b3e29900b7)
+onednn_verbose,info,cpu,runtime:OpenMP,nthr:32
+onednn_verbose,info,cpu,isa:AArch64 SVE (256 bits)
+onednn_verbose,info,gpu,runtime:none
+onednn_verbose,info,prim_template:operation,engine,primitive,implementation,prop_kind,memory_descriptors,attributes,auxiliary,problem_desc,exec_time
+onednn_verbose,exec,cpu,reorder,brgemm_matmul_matrix_B_reorder_t,undef,src_f32::blocked:abc::f0 dst_f32:p:blocked:aCB16b64c::f0,,,1x30x20,0.00292969
+onednn_verbose,exec,cpu,reorder,simple:any,undef,src_f32::blocked:abc::f0 dst_f32::blocked:abc::f0,,,1x30x30,0.0532227
+copy b chunk
+onednn_verbose,exec,cpu,matmul,brg:sve_256,undef,src_f32:a:blocked:abc::f0 wei_f32:ap:blocked:aCB16b64c::f0 dst_f32:a:blocked:abc::f0,,,1x30x30:1x30x20,0.0541992
+onednn_verbose,exec,cpu,reorder,simple:any,undef,src_f32::blocked:abc::f0 dst_f32::blocked:abc::f0,,,1x30x20,0.00488281
+onednn_verbose,exec,cpu,reorder,simple:any,undef,src_f32::blocked:abc::f0 dst_f32::blocked:abc::f0,,,1x30x20,0.00512695
+[   0][DST][0:0:0] exp_f32:       16609 exp:       16609 got:        4251 diff:   12358 rdiff:0.744054
+[   1][DST][0:0:1] exp_f32:       16587 exp:       16587 got:        7116 diff:    9471 rdiff:0.570989
+[   2][DST][0:0:2] exp_f32:       -3060 exp:       -3060 got:        4697 diff:    7757 rdiff: 2.53497
+[   3][DST][0:0:3] exp_f32:        9494 exp:        9494 got:       10838 diff:    1344 rdiff:0.141563
+[   4][DST][0:0:4] exp_f32:        3335 exp:        3335 got:        5969 diff:    2634 rdiff:0.789805
+[   5][DST][0:0:5] exp_f32:      -12051 exp:      -12051 got:        1879 diff:   13930 rdiff: 1.15592
+[   6][DST][0:0:6] exp_f32:       14342 exp:       14342 got:        3827 diff:   10515 rdiff:0.733161
+[   7][DST][0:0:7] exp_f32:       35150 exp:       35150 got:       13444 diff:   21706 rdiff:0.617525
+[   8][DST][0:0:8] exp_f32:      -10188 exp:      -10188 got:       -8159 diff:    2029 rdiff:0.199156
+0:FAILED (errors:600 total:600) __REPRO: --matmul 1x30x30:1x30x20
+tests:1 passed:0 skipped:0 mistrusted:0 unimplemented:0 invalid_arguments:0 failed:1 listed:0
+total compute_ref: sum(s):0.00

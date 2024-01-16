@@ -105,8 +105,7 @@ public:
         _op_floor = 1u,
         _op_mxcsr = 4u,
     };
-    
-    const int EVEX_max_8b_offt = 0x200;
+
     const uint64_t cpu_sveLen = get_sve_length();
 
     const Xbyak_aarch64::WReg W_TMP_0 = w23;

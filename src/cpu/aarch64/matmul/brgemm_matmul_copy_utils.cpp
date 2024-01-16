@@ -3,7 +3,7 @@
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
+* You may obtain a copy of the License at 
 *
 *     http://www.apache.org/licenses/LICENSE-2.0
 *
@@ -1807,7 +1807,7 @@ private:
     dim_t src_stride_, tr_src_stride_;
 
     opmask_t kTail = p7;
-    opmask_t kFFFF = p5;
+    opmask_t kFFFF = p6;
 
     reg64_t reg_src = x1;
     reg64_t reg_tr_src = x2;
@@ -1817,26 +1817,19 @@ private:
     reg64_t reg_K_start = x10;
     reg32_t regw_tmp = w14;
     reg64_t imm_addr64 = x15;
-    // XReg param1 = XReg(7);
-
 
     zmm zmm_permw = z30;
     zmm zmm_zero = z31;
 
-    inline void kmovw(Xbyak_aarch64::PReg k, unsigned w) {
-        movz(regw_tmp, w);
-        // mov(k.b, regw_tmp);
-    }
-
-
-    void copy_16_x_n_block(int nrows, int ncolumns);
+    void copy_8_x_n_block(int nrows, int ncolumns);
     void compute_k_loop(int ncolumns);
     void generate() override;
 };
 
 
 
-void jit_brgemm_matmul_copy_b_f32_t::copy_16_x_n_block(int nrows, int ncolumns) {
+void jit_brgemm_matmul_copy_b_f32_t::copy_8_x_n_block(int nrows, int ncolumns) {
+    //printf("copy_16_x_n_block\n");
 
     auto get_zmm = [](int reg_idx) {
         assert(reg_idx >= 0 && reg_idx < max_regs_available);
@@ -1846,24 +1839,32 @@ void jit_brgemm_matmul_copy_b_f32_t::copy_16_x_n_block(int nrows, int ncolumns) 
         
     auto load = [this, get_zmm](int blk, int k, int n, opmask_t current_mask) {
         auto src_zmm = get_zmm(blk);
-        // auto src_zmm = ZReg(blk);
         auto addr = EVEX_compress_addr(X_DEFAULT_ADDR, X_TMP_0, reg_src, k * src_stride_ + n * typesize_in_);
         ld1w(src_zmm, current_mask / T_z,ptr(addr));
-        // ldr(src_zmm,ptr(addr));
     };
 
     const int columns_tail = ncolumns % n_blk_step;
-    const auto tail_mask = (1 << columns_tail) - 1;
-    if (columns_tail < n_blk_step) 
+    // const auto tail_mask = (1 << columns_tail) - 1;
+    const auto tail_mask = columns_tail;
+    if (columns_tail < n_blk_step)
+    { 
+        //printf("column tailmask: %d\n",tail_mask);
+        // Label l0;
+        // L(l0);
+        // nop();
+        // bl(l0);
+        // set_preg(kTail.s,1, X_TMP_0, X_TMP_1);
+        // set_preg(kTail.s,9, X_TMP_0, X_TMP_1);
+        // set_preg(kTail.s,3, X_TMP_0, X_TMP_1);
+        // set_preg(kTail.s,5, X_TMP_0, X_TMP_1);
         set_preg(kTail.s,tail_mask, X_TMP_0, X_TMP_1);
-    // ldr(kTail,tail_mask);
-        // kmovw(kTail, tail_mask);
+    }
 
     int iter = 0;
-    for_(int k = 0; k < nrows; k++){
+    for_(int k = 0; k < nrows; k++)//nrows = unroll
     for (int n = 0; n < conf_->wei_n_blk; n += n_blk_step) {
         const dim_t tr_src_off = k * tr_src_stride_ + n * typesize_out_;
-        
+        // auto store_addr = EVEX_compress_addr( X_DEFAULT_ADDR, X_TMP_0,reg_tr_src, tr_src_off);
 	    
         const int zero_padding = ncolumns - n;
         if (zero_padding <= 0) {
@@ -1872,17 +1873,21 @@ void jit_brgemm_matmul_copy_b_f32_t::copy_16_x_n_block(int nrows, int ncolumns) 
             continue;
         }
 
+        if(zero_padding < n_blk_step)
+            //printf("k %d n %d zpad %d\n",k,n,zero_padding);
         const opmask_t curr_msk = zero_padding < n_blk_step ? kTail : kFFFF;
+        // Label l0;
+        // L(l0);
+        // nop();
+        // bl(l0);
         const int blk_idx = iter % max_regs_available;
         load(blk_idx, k, n, curr_msk);
        
         auto store_addr = EVEX_compress_addr( X_DEFAULT_ADDR, X_TMP_0,reg_tr_src, tr_src_off);
-        const auto src_zmm0 = ZReg(blk_idx);
-        
+        const auto src_zmm0 = ZReg(blk_idx);        
         str(src_zmm0,ptr(store_addr));
         iter++;
     }
-}
 
 }
 
@@ -1898,7 +1903,7 @@ void jit_brgemm_matmul_copy_b_f32_t::compute_k_loop(int ncolumns) {
         cmp_imm(reg_K_iters, unroll,X_TMP_0);
         b(LT,K_end_label);
 
-        copy_16_x_n_block(unroll, ncolumns);       
+        copy_8_x_n_block(unroll, ncolumns);       
         add_imm(reg_src,reg_src, unroll * src_stride_,X_TMP_0);
         add_imm(reg_tr_src,reg_tr_src, unroll * tr_src_stride_,X_TMP_0);
 
@@ -1921,10 +1926,10 @@ void jit_brgemm_matmul_copy_b_f32_t::generate() {
     LDR_IMM(reg_tr_src, param1, GET_OFF(tr_src));
     LDR_IMM(reg_K_iters, param1, GET_OFF(current_K_iters));
     LDR_IMM(reg_N_blk, param1, GET_OFF(current_N_blk));
-    // mov(kFFFF.b, 0xffff);
-    ptrue(kFFFF.h); 
+    ptrue(kFFFF.b); 
 
     Label done;
+//printf("conf_->N_tail %d\n",conf_->N_tail);
     if (conf_->N_tail > 0) {
         Label not_N_tail;
         cmp_imm(reg_N_blk, conf_->N_tail, X_TMP_0);
@@ -1934,7 +1939,7 @@ void jit_brgemm_matmul_copy_b_f32_t::generate() {
 
         L(not_N_tail);
     }
-
+    //printf("conf_->N_blk %d\n",conf_->N_blk);
     compute_k_loop(conf_->N_blk);
     L(done);
 
@@ -2627,7 +2632,7 @@ status_t create_brgemm_matmul_copy_b(
             }
         }
     }
-
+//printf("create kernel for b buf in copy utils\n");
     return copy_ker->create_kernel();
 }
 

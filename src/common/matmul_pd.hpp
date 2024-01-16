@@ -103,6 +103,7 @@ struct matmul_pd_t : public primitive_desc_t {
                 || memory_desc_wrapper(dst_md_).has_runtime_dims_or_strides();
     };
 
+
     int ndims() const { return dst_md_.ndims; }
 
     dim_t ldc() const {
