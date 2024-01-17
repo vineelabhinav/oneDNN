@@ -5,7 +5,7 @@
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
 *
-*     http://www.apache.org/licenses/LICENSE-2.0
+*     http://www.apache.org/licenses/LICENSE-2.0 
 *
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
@@ -272,7 +272,7 @@ status_t brgemm_matmul_t<isa>::execute_body(const exec_ctx_t &ctx) const {
                                            .bcast_across_all_batch_dims);
                 if (bgmmc.use_buffer_b && !skip_copy_b)
                 {
-                        printf("copy b chunk\n");
+                        //printf("copy b chunk\n");
                     copy_b_chunk_in_buffer(brgmm_ctx, ithr, b, nb, kc);
                 }
                 for (int mb = m_start; mb < m_end; mb++) {
