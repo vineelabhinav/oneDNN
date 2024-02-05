@@ -102,7 +102,7 @@ status_t brgemm_matmul_t<isa>::pd_t::init(engine_t *engine) {
             = !memory_desc_wrapper(weights_md_).has_runtime_strides()
             && !memory_desc_wrapper(dst_md_).has_runtime_strides();
     const bool problem_dt_correct = is_int8 || is_bf16 || is_f32 || is_f16;
-    VDISPATCH_MATMUL(is_dense_format_kind(), VERBOSE_NONTRIVIAL_STRIDE);
+    VDISPATCH_MATMUL(is_dense_data(), VERBOSE_NONTRIVIAL_STRIDE);
     VDISPATCH_MATMUL(mayiuse(isa), VERBOSE_UNSUPPORTED_ISA);
     VDISPATCH_MATMUL(problem_dt_correct, VERBOSE_UNSUPPORTED_DT);
     VDISPATCH_MATMUL(!has_zero_dim_memory(), VERBOSE_EMPTY_TENSOR, "");
