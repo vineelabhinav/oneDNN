@@ -5,7 +5,7 @@
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
 *
-*     http://www.apache.org/licenses/LICENSE-2.0 
+*     http://www.apache.org/licenses/LICENSE-2.0
 *
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
@@ -35,7 +35,7 @@ namespace aarch64 {
 namespace matmul {
 
 using namespace dnnl::impl::cpu::matmul;
-
+using namespace dnnl::impl::format_tag;
 using namespace dnnl::impl::memory_tracking::names;
 using namespace dnnl::impl::utils;
 
@@ -78,6 +78,16 @@ status_t brgemm_matmul_t<isa>::pd_t::init(engine_t *engine) {
             // This case requires scratchpad
             if (N() == DNNL_RUNTIME_DIM_VAL) ok = false;
         }
+        if (!mayiuse(sve_512) && (!attr()->scales_.get(DNNL_ARG_SRC).has_default_values()
+                || !attr()->scales_.get(DNNL_ARG_WEIGHTS).has_default_values()
+                || !attr()->scales_.get(DNNL_ARG_DST).has_default_values())) {
+            return false;
+        }
+        // if(!attr()->post_ops_.has_default_values())
+        //         return false;
+        if(!attr()->post_ops_.sum_with_default_dt())
+                return false;
+        
         return ok;
     };
 
@@ -92,7 +102,7 @@ status_t brgemm_matmul_t<isa>::pd_t::init(engine_t *engine) {
             = !memory_desc_wrapper(weights_md_).has_runtime_strides()
             && !memory_desc_wrapper(dst_md_).has_runtime_strides();
     const bool problem_dt_correct = is_int8 || is_bf16 || is_f32 || is_f16;
-    VDISPATCH_MATMUL(is_dense_data(), VERBOSE_NONTRIVIAL_STRIDE);
+    VDISPATCH_MATMUL(is_dense_format_kind(), VERBOSE_NONTRIVIAL_STRIDE);
     VDISPATCH_MATMUL(mayiuse(isa), VERBOSE_UNSUPPORTED_ISA);
     VDISPATCH_MATMUL(problem_dt_correct, VERBOSE_UNSUPPORTED_DT);
     VDISPATCH_MATMUL(!has_zero_dim_memory(), VERBOSE_EMPTY_TENSOR, "");
@@ -108,6 +118,7 @@ status_t brgemm_matmul_t<isa>::pd_t::init(engine_t *engine) {
             VERBOSE_UNSUPPORTED_ATTR);
     VDISPATCH_MATMUL(attr()->post_ops_.check_sum_consistency(dst_dt, is_int8),
             VERBOSE_UNSUPPORTED_DT);
+
     VDISPATCH_MATMUL(check_attr_scales(), VERBOSE_UNSUPPORTED_SCALES_CFG);
     VDISPATCH_MATMUL(check_attr_zero_points(), VERBOSE_UNSUPPORTED_ZP_CFG);
     VDISPATCH_MATMUL(check_bias(), VERBOSE_UNSUPPORTED_BIAS_CFG);
@@ -166,6 +177,20 @@ status_t brgemm_matmul_t<isa>::pd_t::init(engine_t *engine) {
     init_scratchpad(scratchpad, bgmmc_);
     book_precomputed_scales(scratchpad, attr()->scales_, N());
 
+    const bool is_B_transposed
+        = one_of(bgmmc_.src_tag,abdc, ba, acb,  adbc, abced, abcdfe, abcdegf,
+                abcdefhg, abcdefgih, abcdefghji, abcdefghikj, abcdefghijlk);
+
+        if(mayiuse(sve_512) && is_B_transposed)
+                return status::unimplemented;
+        
+    const bool is_A_transposed
+        = one_of(bgmmc_.src_tag,abdc, ba, acb,  adbc, abced, abcdfe, abcdegf,
+                abcdefhg, abcdefgih, abcdefghji, abcdefghikj, abcdefghijlk);
+
+    if(is_A_transposed)
+        return status::unimplemented;
+
     return status::success;
 }
 
@@ -215,7 +240,7 @@ status_t brgemm_matmul_t<isa>::execute_body(const exec_ctx_t &ctx) const {
     DEFINE_ARG_SCALES_BUFFER(wei_scales, DNNL_ARG_WEIGHTS);
     DEFINE_ARG_SCALES_BUFFER(dst_scales, DNNL_ARG_DST);
 
-        // printf("executing...\n");
+
     const auto src_d = ctx.memory_mdw(DNNL_ARG_SRC, pd()->src_md());
     const auto weights_d = ctx.memory_mdw(DNNL_ARG_WEIGHTS, pd()->weights_md());
     const auto dst_d = ctx.memory_mdw(DNNL_ARG_DST, pd()->dst_md());
@@ -271,10 +296,7 @@ status_t brgemm_matmul_t<isa>::execute_body(const exec_ctx_t &ctx) const {
                                 || bgmmc.bcast_B_desc
                                            .bcast_across_all_batch_dims);
                 if (bgmmc.use_buffer_b && !skip_copy_b)
-                {
-                        //printf("copy b chunk\n");
                     copy_b_chunk_in_buffer(brgmm_ctx, ithr, b, nb, kc);
-                }
                 for (int mb = m_start; mb < m_end; mb++) {
                     const bool skip_copy_a = mc_prev == mc && kc_prev == kc
                             && (b_prev == b
