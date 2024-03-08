@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2021-2023 Intel Corporation
+* Copyright 2024 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -1786,7 +1787,7 @@ struct jit_brgemm_matmul_copy_b_f32_t : public jit_brgemm_matmul_copy_b_t,
         : jit_brgemm_matmul_copy_b_t(conf)
         , jit_generator()
         , dt_in_(data_type::f32)
-        , conf_n(conf)
+        // , conf_n(conf)
         , typesize_in_(types::data_type_size(dt_in_))
         , src_stride_(conf_->wei_tag == acbd ? conf_->copy_B_wei_stride
                                              : conf_->N * typesize_in_)
@@ -1806,7 +1807,8 @@ private:
     const size_t typesize_in_;
     const size_t typesize_out_ = sizeof(float);
     dim_t src_stride_, tr_src_stride_;
-    const brgemm_matmul_conf_t *conf_n;
+    // const brgemm_matmul_conf_t *conf_n;
+    const bool is_sve_256 = mayiuse(sve_512)?false:true;
 
     opmask_t kTail = p7;
     opmask_t kFFFF = p6;
@@ -1832,7 +1834,7 @@ private:
 
 void jit_brgemm_matmul_copy_b_f32_t::copy_16_8_x_n_block(int nrows, int ncolumns) {
 
-    int n_blk_step = is_superset(conf_n->isa, sve_512) ? 16 : 8;
+    int n_blk_step = is_sve_256 ? 8 : 16;
 
     auto get_zmm = [](int reg_idx) {
         assert(reg_idx >= 0 && reg_idx < max_regs_available);
@@ -1897,7 +1899,7 @@ void jit_brgemm_matmul_copy_b_f32_t::compute_k_loop(int ncolumns) {
         L(K_end_label);
     };
 
-    int k_unroll = is_superset(conf_n->isa, sve_512) ? 16 : 8;
+    int k_unroll = is_sve_256 ? 8 : 16;
     compute_uni_k_loop(k_unroll);
     compute_uni_k_loop(1);
 
@@ -2025,8 +2027,7 @@ private:
     ZReg z_tmp_3 = ZReg(30);
     ZReg z_tmp_2 = ZReg(27);
     PReg p_tmp_0 = p7;
-    PReg p_tmp_1 = p6;
-    PReg p_tmp_2 = p8;
+    PReg p_02 = p8;
     PReg p_AA = p9;
     PReg p_55 = p10;
     PReg p_FF = p5;
@@ -2034,6 +2035,7 @@ private:
     PReg p_33 = p3;
     PReg p_F0 = p2;
     PReg p_CC = p1;
+    PReg p_E0 = p6;
 
     void kmovw(Xbyak_aarch64::PReg k, unsigned w) {
         assert(!"under construction");
@@ -2308,7 +2310,6 @@ void jit_brgemm_matmul_copy_b_transposed_t<sve_256>::copy_row_x_col(
 
 
 
-
     const int columns_tail = ncolumns % k_blk_step_;
     auto load = [this, nrows, columns_tail](int i) {
         auto vmm_src = src_vmm(i);
@@ -2347,20 +2348,18 @@ void jit_brgemm_matmul_copy_b_transposed_t<sve_256>::copy_row_x_col(
         const auto src1 = src_vmm(src_idx1);
 
         if (next_src_idx0 < nrows && load_next) { load(next_src_idx0); }
-        // vperm2i128(tmp0, src0, src0, 0x1);                    
+        // vperm2i128(tmp0, src0, src0, 0x1);  
+        // vpalignr(tmp0, tmp0, src0, 0x4);                  
         mov(tmp0.d,src0.d);
         ext(tmp0.b, src0.b, 16);
-       
-        // vpalignr(tmp0, tmp0, src0, 0x4);
-        vpalgr(tmp0, tmp0, src0, 4);  
+        splice(tmp0.s,p_E0,tmp0.s);
 
         if (next_src_idx1 < nrows && load_next) { load(next_src_idx1); }
         // vperm2i128(tmp1, src1, src1, 0x1);
-        mov(tmp1.d,src1.d);
-        ext(tmp1.b, src1.b, 16);
-
         // vpalignr(tmp1, src1, tmp1, 0xC);
-        vpalgr(tmp1, src1, tmp1, 12);
+        set_preg(p_tmp_0.s,1,X_TMP_0,X_TMP_1);
+        mov(tmp1.d,src1.d);
+        splice(tmp1.s,p_tmp_0,tmp1.s);
 
         // vpblendd(src0, src0, tmp1, 0xAA);
         mov(src0.s,p_AA/T_m,tmp1.s);
@@ -2379,18 +2378,19 @@ void jit_brgemm_matmul_copy_b_transposed_t<sve_256>::copy_row_x_col(
         const auto tmp1 = tmp_vmm(1);
         const auto src0 = src_vmm(src_idx0);
         const auto src2 = src_vmm(src_idx2);
-
+        
+        
         // vperm2i128(tmp0, src0, src0, 0x1);
-        mov(tmp0.d,src0.d);
-        ext(tmp0.b, src0.b, 16);
         // vpalignr(tmp0, tmp0, src0, 0x8);
-        vpalgr(tmp0, tmp0, src0, 8);
-
+        not_(p_tmp_0.b,p_FF,p_02.b); //p=FC
+        mov(tmp0.d,src0.d);
+        splice(tmp0.s, p_tmp_0, tmp0.s);
+        
         // vperm2i128(tmp1, src2, src2, 0x1);
-        mov(tmp1.d,src2.d);
-        ext(tmp1.b, src2.b, 16);
         // vpalignr(tmp1, src2, tmp1, 0x8);
-        vpalgr(tmp1, src2, tmp1, 8);
+        rev(p_tmp_0.s,p_02.s); // p=C0
+        mov(tmp1.d,src2.d);
+        splice(tmp1.s, p_tmp_0, tmp1.s);
 
         // vpblendd(src2, src2, tmp0, 0x33);
         mov(src2.s, p_33/T_m, tmp0.s);        
@@ -2404,22 +2404,19 @@ void jit_brgemm_matmul_copy_b_transposed_t<sve_256>::copy_row_x_col(
         const int src_idx4 = src_idx0 + 4;
 
         const auto tmp0 = tmp_vmm(0);
-        const auto tmp4 = tmp_vmm(1);
+        // const auto tmp4 = tmp_vmm(1);
         const auto src0 = src_vmm(src_idx0);
-        const auto src4 = src_vmm(src_idx4);        
+        const auto src4 = src_vmm(src_idx4); 
 
         // vperm2i128(tmp4, src4, src4, 0x01);
-        mov(tmp4.d,src4.d);
-        ext(tmp4.b, src4.b, 16);
-
         // vperm2i128(tmp0, src0, src0, 0x01);
-        mov(tmp0.d,src0.d);
-        ext(tmp0.b, src0.b, 16);
-
         // vpblendd(src0, src0, tmp4, 0xF0);
-        mov(src0.s,p_F0/T_m,tmp4.s);    
-
         // vpblendd(src4, src4, tmp0, 0x0F);
+
+        mov(tmp0.d,src0.d);
+        ext(tmp0.b, src0.b, 16);   
+
+        splice(src0.s,p_0F,src4.s);   
         mov(src4.s, p_0F/T_m, tmp0.s);
     }
     // swap 8
@@ -2527,9 +2524,12 @@ void jit_brgemm_matmul_copy_b_transposed_t<isa>::generate() {
     eor(p_33.b,p_FF,p_33.b,p_tmp_0.b);
     rev(p_CC.s,p_33.s);
     pfalse(p_AA.b);
-    ptrue(p_tmp_2.s);      
-    trn1(p_AA.s,p_AA.s,p_tmp_2.s);
+    ptrue(p_tmp_0.s);      
+    trn1(p_AA.s,p_AA.s,p_tmp_0.s);
     rev(p_55.s,p_AA.s);
+    set_preg(p_E0.s,3,X_TMP_0,X_TMP_1);
+    rev(p_E0.s,p_E0.s);
+    set_preg(p_02.s,2,X_TMP_0,X_TMP_1);
 
     LDR_IMM(reg_src_base, param1, GET_OFF(src));
     LDR_IMM(reg_tr_src_base, param1, GET_OFF(tr_src));
