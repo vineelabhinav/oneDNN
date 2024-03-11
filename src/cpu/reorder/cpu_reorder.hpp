@@ -34,7 +34,7 @@
 #include "cpu/x64/matmul/brgemm_matmul_reorders.hpp"
 #elif DNNL_AARCH64
 #include "cpu/aarch64/jit_uni_reorder.hpp"
-#include "cpu/aarch64/matmul/brgemm_matmul_reorders.hpp"
+//#include "cpu/aarch64/matmul/brgemm_matmul_reorders.hpp"
 #endif
 
 #include "cpu/rnn/rnn_reorders.hpp"
